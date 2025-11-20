@@ -10,6 +10,7 @@ import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.World;
 import org.bukkit.util.Vector;
+import sh.harold.fulcrum.physics.ParticleStyle;
 
 public final class PendulumChain {
 
@@ -22,6 +23,7 @@ public final class PendulumChain {
     private final int id;
     private final List<PendulumNode> nodes = new ArrayList<>();
     private double[] segmentLength = new double[0];
+    private ParticleStyle particleStyle = ParticleStyle.WEIGHTED;
     private Location anchor;
     private double scale = 2.0;
     private double gravity = 9.81;
@@ -29,6 +31,9 @@ public final class PendulumChain {
     private int iterations = 8;
     private int substeps = 10;
     private boolean active;
+    private boolean traceTip;
+    private boolean showNodes = true;
+    private float nodeParticleSize = 1.0f;
 
     public PendulumChain(int id, Location anchor) {
         this.id = id;
@@ -124,6 +129,14 @@ public final class PendulumChain {
         return this.nodes.get(nodeIndex).mass();
     }
 
+    public ParticleStyle particleStyle() {
+        return this.particleStyle;
+    }
+
+    public void particleStyle(ParticleStyle style) {
+        this.particleStyle = style;
+    }
+
     public void setMass(int nodeIndex, double mass) {
         ensureNodeIndex(nodeIndex);
         if (nodeIndex == 0) {
@@ -135,6 +148,30 @@ public final class PendulumChain {
 
     public boolean configured() {
         return !this.nodes.isEmpty() && this.segmentLength.length == this.nodes.size() - 1;
+    }
+
+    public boolean traceTip() {
+        return this.traceTip;
+    }
+
+    public void traceTip(boolean traceTip) {
+        this.traceTip = traceTip;
+    }
+
+    public boolean showNodes() {
+        return this.showNodes;
+    }
+
+    public void showNodes(boolean showNodes) {
+        this.showNodes = showNodes;
+    }
+
+    public float nodeParticleSize() {
+        return this.nodeParticleSize;
+    }
+
+    public void nodeParticleSize(float size) {
+        this.nodeParticleSize = Math.max(0.2f, Math.min(2.5f, size));
     }
 
     public void configureSegments(int segments) {
@@ -280,7 +317,6 @@ public final class PendulumChain {
             return;
         }
         Objects.requireNonNull(world, "world");
-        final Particle.DustOptions rodDust = new Particle.DustOptions(Color.fromRGB(255, 200, 80), 0.8f);
 
         for (int i = 0; i < this.nodes.size() - 1; i++) {
             final Location from = toWorld(world, i);
@@ -294,8 +330,19 @@ public final class PendulumChain {
             final int samples = Math.max(1, (int) Math.ceil(dist / step));
             final Vector stride = delta.multiply(1.0 / samples);
             final Location cursor = from.clone();
+            final ParticleStyle style = this.particleStyle;
+            final double massA = Math.max(MIN_MASS, this.nodes.get(i).mass());
+            final double massB = Math.max(MIN_MASS, this.nodes.get(i + 1).mass());
+            final double massSample = (massA + massB) * 0.5;
+            final Particle.DustOptions rodDust = style == ParticleStyle.WEIGHTED
+                ? new Particle.DustOptions(colorForMass(massSample), 0.8f)
+                : null;
             for (int s = 0; s <= samples; s++) {
-                world.spawnParticle(Particle.DUST, cursor, 1, rodDust);
+                if (style == ParticleStyle.SPARK) {
+                    world.spawnParticle(Particle.WAX_OFF, cursor, 1, 0.0, 0.0, 0.0, 0.0);
+                } else if (rodDust != null) {
+                    world.spawnParticle(Particle.DUST, cursor, 1, rodDust);
+                }
                 cursor.add(stride);
             }
         }
@@ -304,13 +351,21 @@ public final class PendulumChain {
             final PendulumNode node = this.nodes.get(i);
             final double mass = Math.max(MIN_MASS, node.mass());
             final Location at = toWorld(world, i);
-            final float size = (float) Math.min(1.4, 0.3 + mass * 0.05);
-            final int intensity = (int) Math.min(255, 60 + mass * 8.0);
-            final Particle.DustOptions bobDust = new Particle.DustOptions(
-                Color.fromRGB(intensity, 70, 255 - Math.min(200, intensity)),
-                size
-            );
+            if (!this.showNodes && i != 0) {
+                continue;
+            }
+            final float size = Math.max(this.nodeParticleSize, (float) Math.min(1.4, 0.3 + mass * 0.05));
+            final ParticleStyle style = this.particleStyle;
+            final Color color = style == ParticleStyle.WEIGHTED
+                ? Color.fromRGB(255, 255, 255)
+                : colorForMass(mass);
+            final Particle.DustOptions bobDust = new Particle.DustOptions(color, size);
             world.spawnParticle(Particle.DUST, at, 3, bobDust);
+        }
+
+        if (this.traceTip && !this.nodes.isEmpty()) {
+            final Location tip = toWorld(world, this.nodes.size() - 1);
+            world.spawnParticle(Particle.DRIPPING_OBSIDIAN_TEAR, tip, 2, 0.02, 0.02, 0.02, 0.0);
         }
     }
 
@@ -332,6 +387,25 @@ public final class PendulumChain {
         if (idx < 0 || idx >= this.nodes.size()) {
             throw new IndexOutOfBoundsException(idx);
         }
+    }
+
+    private Color colorForMass(double mass) {
+        double min = Double.POSITIVE_INFINITY;
+        double max = Double.NEGATIVE_INFINITY;
+        for (int i = 1; i < this.nodes.size(); i++) {
+            final double m = Math.max(MIN_MASS, this.nodes.get(i).mass());
+            min = Math.min(min, m);
+            max = Math.max(max, m);
+        }
+        if (!Double.isFinite(min) || !Double.isFinite(max)) {
+            min = max = mass;
+        }
+        final double span = Math.max(1e-9, max - min);
+        final double t = Math.max(0.0, Math.min(1.0, (mass - min) / span));
+        final int r = (int) Math.round(64 + (180 - 64) * t);
+        final int g = (int) Math.round(255 - (255 - 32) * t);
+        final int b = (int) Math.round(128 - (128 - 32) * t);
+        return Color.fromRGB(r, g, b);
     }
 
     private static double clamp(double value, double min, double max) {

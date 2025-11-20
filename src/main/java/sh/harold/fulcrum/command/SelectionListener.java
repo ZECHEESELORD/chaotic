@@ -10,6 +10,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.block.BlockDamageEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import net.kyori.adventure.text.Component;
 import sh.harold.fulcrum.sim.PendulumManager;
@@ -26,7 +27,7 @@ public final class SelectionListener implements Listener {
         this.maxChains = maxChains;
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onInteract(PlayerInteractEvent event) {
         if (event.getAction() != Action.LEFT_CLICK_BLOCK && event.getAction() != Action.RIGHT_CLICK_BLOCK) {
             return;
@@ -47,15 +48,16 @@ public final class SelectionListener implements Listener {
             return;
         }
 
+        event.setCancelled(true);
         if (this.manager.chains().size() >= this.maxChains) {
             player.sendMessage(Component.text("Pendulum limit reached; clear one before creating another."));
-            this.sessions.remove(player.getUniqueId());
+            this.sessions.remove(playerId);
             return;
         }
 
         final Location anchor = block.getLocation().add(0.5, 1.0, 0.5);
         final int id = this.manager.createPendulum(anchor);
-        this.sessions.remove(player.getUniqueId());
+        this.sessions.remove(playerId);
 
         final String pos = "%s %.1f, %.1f, %.1f".formatted(
             anchor.getWorld().getName(),
@@ -64,6 +66,21 @@ public final class SelectionListener implements Listener {
             anchor.getZ()
         );
         player.sendMessage(Component.text("Created pendulum #" + id + " at " + pos + ". Configure it with /pendulum " + id + "."));
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onDamage(BlockDamageEvent event) {
+        final Player player = event.getPlayer();
+        final UUID playerId = player.getUniqueId();
+        final SelectionSession session = this.sessions.get(playerId);
+        if (session == null) {
+            return;
+        }
+        if (session.expired()) {
+            this.sessions.remove(playerId);
+            return;
+        }
+        event.setCancelled(true);
     }
 
     public void requestSelection(Player player) {

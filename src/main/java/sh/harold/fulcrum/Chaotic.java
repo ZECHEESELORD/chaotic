@@ -133,6 +133,20 @@ public final class Chaotic extends JavaPlugin {
                     player.sendMessage(Component.text("Pendulum #" + id + " reset to " + pose.name().toLowerCase() + " pose."));
                     return Command.SINGLE_SUCCESS;
                 }))))
+            .then(Commands.literal("remove").then(Commands.argument("id", IntegerArgumentType.integer(1)).executes(ctx -> {
+                final Player player = playerOrWarn(ctx.getSource());
+                if (player == null) {
+                    return Command.SINGLE_SUCCESS;
+                }
+                final int id = IntegerArgumentType.getInteger(ctx, "id");
+                if (this.manager.get(id).isEmpty()) {
+                    player.sendMessage(Component.text("No pendulum #" + id + " exists."));
+                    return Command.SINGLE_SUCCESS;
+                }
+                this.manager.remove(id);
+                player.sendMessage(Component.text("Removed pendulum #" + id + "."));
+                return Command.SINGLE_SUCCESS;
+            })))
             .then(Commands.argument("id", IntegerArgumentType.integer(1)).executes(ctx -> {
                 final Player player = playerOrWarn(ctx.getSource());
                 if (player == null) {

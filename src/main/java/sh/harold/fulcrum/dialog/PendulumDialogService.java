@@ -19,8 +19,10 @@ import io.papermc.paper.registry.data.dialog.action.DialogAction;
 import io.papermc.paper.registry.data.dialog.action.DialogActionCallback;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.input.DialogInput;
+import io.papermc.paper.registry.data.dialog.input.SingleOptionDialogInput;
 import io.papermc.paper.registry.data.dialog.type.DialogType;
 import sh.harold.fulcrum.physics.PendulumChain;
+import sh.harold.fulcrum.physics.ParticleStyle;
 import sh.harold.fulcrum.physics.PoseType;
 import sh.harold.fulcrum.sim.PendulumManager;
 
@@ -63,7 +65,7 @@ public final class PendulumDialogService {
         final List<DialogInput> inputs = List.of(
             DialogInput.numberRange("segments", Component.text("Segments"), 1.0f, (float) MAX_SEGMENTS)
                 .width(200)
-                .labelFormat("%s")
+                .labelFormat("%s: %s")
                 .initial((float) currentSegments)
                 .step(1.0f)
                 .build()
@@ -84,20 +86,15 @@ public final class PendulumDialogService {
             })))
             .build();
 
-        final ActionButton cancel = ActionButton.builder(Component.text("Cancel"))
-            .width(100)
-            .action(customClick((response, audience) -> this.runSync(audience::closeDialog)))
-            .build();
-
         final DialogBase base = DialogBase.builder(Component.text("Configure pendulum"))
             .canCloseWithEscape(true)
             .pause(false)
-            .afterAction(DialogAfterAction.WAIT_FOR_RESPONSE)
+            .afterAction(DialogAfterAction.CLOSE)
             .body(body)
             .inputs(inputs)
             .build();
 
-        final DialogType type = DialogType.multiAction(List.of(next, cancel), cancel, 2);
+        final DialogType type = DialogType.multiAction(List.of(next), null, 1);
         return buildDialog(base, type);
     }
 
@@ -116,15 +113,15 @@ public final class PendulumDialogService {
         final List<DialogInput> inputs = List.of(
             DialogInput.numberRange("length", Component.text("Length (m)"), (float) LENGTH_MIN, (float) LENGTH_MAX)
                 .width(220)
+                .labelFormat("%s: %s")
                 .initial((float) length)
                 .step(0.05f)
-                .labelFormat("%s")
                 .build(),
             DialogInput.numberRange("mass", Component.text("Mass (kg)"), (float) MASS_MIN, (float) MASS_MAX)
                 .width(220)
+                .labelFormat("%s: %s")
                 .initial((float) mass)
                 .step(0.1f)
-                .labelFormat("%s")
                 .build()
         );
 
@@ -161,20 +158,15 @@ public final class PendulumDialogService {
             })))
             .build();
 
-        final ActionButton cancel = ActionButton.builder(Component.text("Close"))
-            .width(100)
-            .action(customClick((response, audience) -> this.runSync(audience::closeDialog)))
-            .build();
-
         final DialogBase base = DialogBase.builder(Component.text("Segment builder"))
             .canCloseWithEscape(true)
             .pause(false)
-            .afterAction(DialogAfterAction.WAIT_FOR_RESPONSE)
+            .afterAction(DialogAfterAction.CLOSE)
             .body(body)
             .inputs(inputs)
             .build();
 
-        final DialogType type = DialogType.multiAction(List.of(back, next, cancel), cancel, 2);
+        final DialogType type = DialogType.multiAction(List.of(back, next), null, 2);
         return buildDialog(base, type);
     }
 
@@ -193,39 +185,52 @@ public final class PendulumDialogService {
 
         final List<DialogBody> body = List.of(
             DialogBody.plainMessage(Component.text("Summary for pendulum #" + chain.id())),
+            DialogBody.plainMessage(Component.text("Style: " + chain.particleStyle().name().toLowerCase())),
             DialogBody.plainMessage(Component.text(summary.toString()), 320)
         );
 
         final List<DialogInput> inputs = List.of(
             DialogInput.numberRange("scale", Component.text("Scale (blocks per m)"), 1.0f, 5.0f)
                 .width(200)
+                .labelFormat("%s: %s")
                 .initial((float) chain.scale())
                 .step(0.1f)
-                .labelFormat("%s")
                 .build(),
+            DialogInput.singleOption("style", Component.text("Particle style"), styleOptions(chain.particleStyle()))
+                .width(200)
+                .labelVisible(true)
+                .build(),
+            DialogInput.bool("trace", Component.text("Trace tip"), chain.traceTip(), "true", "false"),
             DialogInput.numberRange("drag", Component.text("Drag"), 0.001f, 0.05f)
                 .width(200)
+                .labelFormat("%s: %s")
                 .initial((float) chain.drag())
                 .step(0.001f)
-                .labelFormat("%s")
                 .build(),
             DialogInput.numberRange("substeps", Component.text("Substeps"), 1.0f, 40.0f)
                 .width(200)
+                .labelFormat("%s: %s")
                 .initial((float) chain.substeps())
                 .step(1.0f)
-                .labelFormat("%s")
                 .build(),
             DialogInput.numberRange("iterations", Component.text("Iterations"), 1.0f, 20.0f)
                 .width(200)
+                .labelFormat("%s: %s")
                 .initial((float) chain.iterations())
                 .step(1.0f)
-                .labelFormat("%s")
                 .build(),
             DialogInput.numberRange("gravity", Component.text("Gravity"), 5.0f, 15.0f)
                 .width(200)
+                .labelFormat("%s: %s")
                 .initial((float) chain.gravity())
                 .step(0.05f)
-                .labelFormat("%s")
+                .build(),
+            DialogInput.bool("nodes", Component.text("Show node particles"), chain.showNodes(), "true", "false"),
+            DialogInput.numberRange("nodeSize", Component.text("Node particle size"), 0.2f, 2.5f)
+                .width(200)
+                .labelFormat("%s: %s")
+                .initial(chain.nodeParticleSize())
+                .step(0.1f)
                 .build()
         );
 
@@ -252,11 +257,15 @@ public final class PendulumDialogService {
                 final int substeps = readInt(response.getFloat("substeps"), 1, 80, chain.substeps());
                 final int iterations = readInt(response.getFloat("iterations"), 1, 30, chain.iterations());
                 final double gravity = readDouble(response.getFloat("gravity"), chain.gravity(), 5.0, 15.0);
+                final ParticleStyle style = parseStyle(response.getText("style"), chain.particleStyle());
+                final Boolean trace = response.getBoolean("trace");
                 chain.scale(scale);
+                chain.particleStyle(style);
                 chain.drag(drag);
                 chain.substeps(substeps);
                 chain.iterations(iterations);
                 chain.gravity(gravity);
+                chain.traceTip(trace != null ? trace : chain.traceTip());
                 chain.resetPose(PoseType.DOWN, ThreadLocalRandom.current());
                 audience.closeDialog();
                 player.sendMessage(Component.text("Pendulum #" + chain.id() + " updated. Use /pendulum start " + chain.id() + " to swing."));
@@ -266,12 +275,12 @@ public final class PendulumDialogService {
         final DialogBase base = DialogBase.builder(Component.text("Finalize configuration"))
             .canCloseWithEscape(true)
             .pause(false)
-            .afterAction(DialogAfterAction.WAIT_FOR_RESPONSE)
+            .afterAction(DialogAfterAction.CLOSE)
             .body(body)
             .inputs(inputs)
             .build();
 
-        final DialogType type = DialogType.multiAction(List.of(back, apply), apply, 2);
+        final DialogType type = DialogType.multiAction(List.of(back, apply), null, 2);
         return buildDialog(base, type);
     }
 
@@ -318,5 +327,37 @@ public final class PendulumDialogService {
         chain.setSegmentLength(segmentIndex, length);
         chain.setMass(segmentIndex + 1, mass);
         chain.active(false);
+    }
+
+    private List<SingleOptionDialogInput.OptionEntry> styleOptions(ParticleStyle current) {
+        final List<SingleOptionDialogInput.OptionEntry> entries = new java.util.ArrayList<>();
+        for (final ParticleStyle style : ParticleStyle.values()) {
+            entries.add(SingleOptionDialogInput.OptionEntry.create(
+                style.name().toLowerCase(),
+                Component.text(style == ParticleStyle.WEIGHTED ? "Weighted color blend" : "Electric spark"),
+                style == current
+            ));
+        }
+        return entries;
+    }
+
+    private ParticleStyle parseStyle(String id, ParticleStyle fallback) {
+        if (id == null) {
+            return fallback;
+        }
+        try {
+            return ParticleStyle.valueOf(id.toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            return fallback;
+        }
+    }
+
+    @SafeVarargs
+    private List<DialogInput> merge(List<DialogInput>... lists) {
+        final List<DialogInput> merged = new java.util.ArrayList<>();
+        for (final List<DialogInput> list : lists) {
+            merged.addAll(list);
+        }
+        return merged;
     }
 }
