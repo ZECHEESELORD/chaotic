@@ -3,11 +3,6 @@ package sh.harold.fulcrum.dialog;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
-import org.bukkit.entity.Player;
-import org.bukkit.plugin.Plugin;
-import net.kyori.adventure.audience.Audience;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.event.ClickCallback;
 import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.dialog.DialogResponseView;
 import io.papermc.paper.registry.RegistryBuilderFactory;
@@ -21,6 +16,12 @@ import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import io.papermc.paper.registry.data.dialog.input.SingleOptionDialogInput;
 import io.papermc.paper.registry.data.dialog.type.DialogType;
+import net.kyori.adventure.audience.Audience;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickCallback;
+import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
 import sh.harold.fulcrum.physics.PendulumChain;
 import sh.harold.fulcrum.physics.ParticleStyle;
 import sh.harold.fulcrum.physics.PoseType;
@@ -60,8 +61,8 @@ public final class PendulumDialogService {
     private Dialog segmentCountDialog(PendulumChain chain) {
         final int currentSegments = Math.max(1, chain.segmentCount() == 0 ? 3 : chain.segmentCount());
         final List<DialogBody> body = List.of(
-            DialogBody.plainMessage(Component.text("Pendulum #" + chain.id() + " anchored in " + chain.anchor().getWorld().getName())),
-            DialogBody.plainMessage(Component.text("Pick how many links should dance."))
+            DialogBody.plainMessage(Component.text("Pendulum #" + chain.id() + " in " + chain.anchor().getWorld().getName(), NamedTextColor.GOLD)),
+            DialogBody.plainMessage(Component.text("Step 1: Choose how many links to simulate.", NamedTextColor.GRAY))
         );
         final List<DialogInput> inputs = List.of(
             DialogInput.numberRange("segments", Component.text("Segments"), 1.0f, (float) MAX_SEGMENTS)
@@ -107,18 +108,18 @@ public final class PendulumDialogService {
         final int total = chain.segmentCount();
 
         final List<DialogBody> body = List.of(
-            DialogBody.plainMessage(Component.text("Segment " + (segmentIndex + 1) + " of " + total)),
-            DialogBody.plainMessage(Component.text("Tune length and bob mass for this link."))
+            DialogBody.plainMessage(Component.text("Segment " + (segmentIndex + 1) + " of " + total, NamedTextColor.GOLD)),
+            DialogBody.plainMessage(Component.text("Step 2: Tune length and bob mass for this link.", NamedTextColor.GRAY))
         );
 
         final List<DialogInput> inputs = List.of(
-            DialogInput.numberRange("length", Component.text("Length (m)"), (float) LENGTH_MIN, (float) LENGTH_MAX)
+            DialogInput.numberRange("length", Component.text("Length (Meters)"), (float) LENGTH_MIN, (float) LENGTH_MAX)
                 .width(220)
                 .labelFormat("%s: %s")
                 .initial((float) length)
                 .step(0.05f)
                 .build(),
-            DialogInput.numberRange("mass", Component.text("Mass (kg)"), (float) MASS_MIN, (float) MASS_MAX)
+            DialogInput.numberRange("mass", Component.text("Mass (Kg)"), (float) MASS_MIN, (float) MASS_MAX)
                 .width(220)
                 .labelFormat("%s: %s")
                 .initial((float) mass)
@@ -185,24 +186,24 @@ public final class PendulumDialogService {
         }
 
         final List<DialogBody> body = List.of(
-            DialogBody.plainMessage(Component.text("Summary for pendulum #" + chain.id())),
-            DialogBody.plainMessage(Component.text("Style: " + chain.particleStyle().name().toLowerCase())),
-            DialogBody.plainMessage(Component.text(summary.toString()), 320)
+            DialogBody.plainMessage(Component.text("Step 3: Review & polish", NamedTextColor.GOLD)),
+            DialogBody.plainMessage(Component.text("Style: " + chain.particleStyle().name().toLowerCase(), NamedTextColor.AQUA)),
+            DialogBody.plainMessage(Component.text(summary.toString(), NamedTextColor.GRAY), 320)
         );
 
         final List<DialogInput> inputs = List.of(
-            DialogInput.numberRange("scale", Component.text("Scale (blocks per m)"), 1.0f, 5.0f)
+            DialogInput.numberRange("scale", Component.text("Scale (Blocks per Meter)"), 1.0f, 5.0f)
                 .width(200)
                 .labelFormat("%s: %s")
                 .initial((float) chain.scale())
                 .step(0.1f)
                 .build(),
-            DialogInput.singleOption("style", Component.text("Particle style"), styleOptions(chain.particleStyle()))
+            DialogInput.singleOption("style", Component.text("Particle Style"), styleOptions(chain.particleStyle()))
                 .width(200)
                 .labelVisible(true)
                 .build(),
-            DialogInput.bool("trace", Component.text("Trace tip"), chain.traceTip(), "true", "false"),
-            DialogInput.singleOption("tipStyle", Component.text("Tip trail style"), tipStyleOptions(chain.tipTrailStyle()))
+            DialogInput.bool("trace", Component.text("Trace Tip"), chain.traceTip(), "true", "false"),
+            DialogInput.singleOption("tipStyle", Component.text("Tip Trail Style"), tipStyleOptions(chain.tipTrailStyle()))
                 .width(200)
                 .labelVisible(true)
                 .build(),
@@ -230,8 +231,8 @@ public final class PendulumDialogService {
                 .initial((float) chain.gravity())
                 .step(0.05f)
                 .build(),
-            DialogInput.bool("nodes", Component.text("Show node particles"), chain.showNodes(), "true", "false"),
-            DialogInput.numberRange("nodeSize", Component.text("Node particle size"), 0.2f, 2.5f)
+            DialogInput.bool("nodes", Component.text("Show Node Particles"), chain.showNodes(), "true", "false"),
+            DialogInput.numberRange("nodeSize", Component.text("Node Particle Size"), 0.2f, 2.5f)
                 .width(200)
                 .labelFormat("%s: %s")
                 .initial(chain.nodeParticleSize())
