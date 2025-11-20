@@ -99,7 +99,7 @@ public final class PendulumManager {
         if (a == null || b == null) {
             return;
         }
-        final double baseAngle = -Math.PI / 2 + 0.75;
+        final double baseAngle = Math.PI * 0.75;
         final double delta = 0.0001;
 
         for (PendulumChain chain : new PendulumChain[]{a, b}) {
@@ -124,7 +124,7 @@ public final class PendulumManager {
         b.setPoseAngles(baseAngle + delta, baseAngle + delta);
         // differentiate colors for the second chain
         b.setOverrideColors(org.bukkit.Color.fromRGB(70, 120, 255), org.bukkit.Color.fromRGB(200, 200, 255));
-        a.active(true);
-        b.active(true);
+        a.active(false);
+        b.active(false);
     }
 }
