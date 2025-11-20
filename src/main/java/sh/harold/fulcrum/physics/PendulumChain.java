@@ -552,11 +552,12 @@ public final class PendulumChain {
 
         for (int i = 0; i < segments; i++) {
             final List<Entity> pool = this.segmentEntities.get(i);
-            while (pool.size() < 8) {
+            final int desired = Math.max(2, Math.min(12, (int) Math.ceil(this.segmentLength[i] / 0.5)));
+            while (pool.size() < desired) {
                 final EntityType type = pool.size() % 2 == 0 ? typeEven : typeOdd;
                 pool.add(spawnEntity(world, type));
             }
-            while (pool.size() > 8) {
+            while (pool.size() > desired) {
                 final Entity removed = pool.remove(pool.size() - 1);
                 removed.remove();
             }
