@@ -1,0 +1,6 @@
+name: chaotic
+version: '0.0.1'
+main: sh.harold.chaotic.Chaotic
+api-version: '1.21'
+authors: [ Harold, ZECHEESELORD ]
+website: https://harold.sh
