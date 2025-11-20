@@ -104,14 +104,14 @@ public final class PendulumManager {
 
         for (PendulumChain chain : new PendulumChain[]{a, b}) {
             chain.configureSegments(2);
-            chain.setSegmentLength(0, 1.4);
-            chain.setSegmentLength(1, 1.4);
-            chain.setMass(1, 1.0);
-            chain.setMass(2, 1.0);
-            chain.particleStyle(ParticleStyle.CHICKEN);
-            chain.setItemParticles(new org.bukkit.inventory.ItemStack(org.bukkit.Material.CHICKEN), new org.bukkit.inventory.ItemStack(org.bukkit.Material.COOKED_CHICKEN));
-            chain.tipTrailStyle(TipTrailStyle.CHERRY);
-            chain.traceTip(true);
+            chain.setSegmentLength(0, 1.8);
+            chain.setSegmentLength(1, 1.8);
+            chain.setMass(1, 2.5);
+            chain.setMass(2, 1.2);
+            chain.particleStyle(ParticleStyle.WEIGHTED);
+            chain.setOverrideColors(org.bukkit.Color.fromRGB(220, 60, 60), org.bukkit.Color.fromRGB(220, 220, 220));
+            chain.tipTrailStyle(TipTrailStyle.END_ROD);
+            chain.traceTip(false);
             chain.showNodes(true);
             chain.nodeParticleSize(1.2f);
             chain.drag(0.01);
@@ -122,6 +122,8 @@ public final class PendulumManager {
         }
         a.setPoseAngles(baseAngle, baseAngle);
         b.setPoseAngles(baseAngle + delta, baseAngle + delta);
+        // differentiate colors for the second chain
+        b.setOverrideColors(org.bukkit.Color.fromRGB(70, 120, 255), org.bukkit.Color.fromRGB(200, 200, 255));
         a.active(true);
         b.active(true);
     }

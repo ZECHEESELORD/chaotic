@@ -49,6 +49,8 @@ public final class PendulumChain {
     private TipTrailStyle tipTrailStyle = TipTrailStyle.END_ROD;
     private ItemStack itemParticleEven = COD_PARTICLE;
     private ItemStack itemParticleOdd = SALMON_PARTICLE;
+    private Color rodOverrideColor;
+    private Color nodeOverrideColor;
 
     public PendulumChain(int id, Location anchor, Plugin plugin) {
         this.id = id;
@@ -201,6 +203,11 @@ public final class PendulumChain {
     public void setItemParticles(ItemStack even, ItemStack odd) {
         this.itemParticleEven = even == null ? COD_PARTICLE : even.clone();
         this.itemParticleOdd = odd == null ? SALMON_PARTICLE : odd.clone();
+    }
+
+    public void setOverrideColors(Color rodColor, Color nodeColor) {
+        this.rodOverrideColor = rodColor;
+        this.nodeOverrideColor = nodeColor;
     }
 
     public void configureSegments(int segments) {
@@ -423,7 +430,8 @@ public final class PendulumChain {
                 final double massA = Math.max(MIN_MASS, this.nodes.get(i).mass());
                 final double massB = Math.max(MIN_MASS, this.nodes.get(i + 1).mass());
                 final double massSample = (massA + massB) * 0.5;
-                final Particle.DustOptions rodDust = new Particle.DustOptions(colorForMass(massSample), 0.8f);
+                final Color rodColor = this.rodOverrideColor != null ? this.rodOverrideColor : colorForMass(massSample);
+                final Particle.DustOptions rodDust = new Particle.DustOptions(rodColor, 0.8f);
                 final double step = 0.15;
                 final int samples = Math.max(1, (int) Math.ceil(dist / step));
                 final Vector stride = delta.multiply(1.0 / samples);
@@ -451,7 +459,8 @@ public final class PendulumChain {
                 final float size = Math.max(this.nodeParticleSize, (float) Math.min(1.4, 0.3 + mass * 0.05));
                 switch (style) {
                     case WEIGHTED -> {
-                        final Particle.DustOptions bobDust = new Particle.DustOptions(Color.fromRGB(255, 255, 255), size);
+                        final Color nodeColor = this.nodeOverrideColor != null ? this.nodeOverrideColor : Color.fromRGB(255, 255, 255);
+                        final Particle.DustOptions bobDust = new Particle.DustOptions(nodeColor, size);
                         world.spawnParticle(Particle.DUST, at, 3, bobDust);
                     }
                     case SPARK -> world.spawnParticle(Particle.ELECTRIC_SPARK, at, 3, 0.0, 0.0, 0.0, 0.0);
