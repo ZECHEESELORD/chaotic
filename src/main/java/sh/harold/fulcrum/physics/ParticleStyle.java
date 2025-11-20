@@ -5,5 +5,7 @@ public enum ParticleStyle {
     SPARK,
     BUBBLE,
     BUBBLE_COLUMN_UP,
-    BUBBLE_POP
+    BUBBLE_POP,
+    FISH,
+    CHICKEN
 }

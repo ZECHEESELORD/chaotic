@@ -11,6 +11,8 @@ import org.bukkit.World;
 import org.bukkit.plugin.Plugin;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import sh.harold.fulcrum.physics.PendulumChain;
+import sh.harold.fulcrum.physics.ParticleStyle;
+import sh.harold.fulcrum.physics.TipTrailStyle;
 
 public final class PendulumManager {
 
@@ -33,7 +35,7 @@ public final class PendulumManager {
 
     public int createPendulum(Location anchor) {
         final int id = this.nextId.getAndIncrement();
-        final PendulumChain chain = new PendulumChain(id, anchor);
+        final PendulumChain chain = new PendulumChain(id, anchor, this.plugin);
         this.chainsById.put(id, chain);
         this.scheduleChain(chain);
         return id;
@@ -44,7 +46,10 @@ public final class PendulumManager {
         if (task != null) {
             task.cancel();
         }
-        this.chainsById.remove(id);
+        final PendulumChain chain = this.chainsById.remove(id);
+        if (chain != null) {
+            chain.cleanupEntities();
+        }
     }
 
     public void tickAll(double dtTick, World world) {
@@ -86,5 +91,38 @@ public final class PendulumManager {
             1L
         );
         this.scheduledTasks.put(chain.id(), task);
+    }
+
+    public void configureButterfly(int idA, int idB) {
+        final PendulumChain a = this.chainsById.get(idA);
+        final PendulumChain b = this.chainsById.get(idB);
+        if (a == null || b == null) {
+            return;
+        }
+        final double baseAngle = -Math.PI / 2 + 0.75;
+        final double delta = 0.0001;
+
+        for (PendulumChain chain : new PendulumChain[]{a, b}) {
+            chain.configureSegments(2);
+            chain.setSegmentLength(0, 1.4);
+            chain.setSegmentLength(1, 1.4);
+            chain.setMass(1, 1.0);
+            chain.setMass(2, 1.0);
+            chain.particleStyle(ParticleStyle.CHICKEN);
+            chain.setItemParticles(new org.bukkit.inventory.ItemStack(org.bukkit.Material.CHICKEN), new org.bukkit.inventory.ItemStack(org.bukkit.Material.COOKED_CHICKEN));
+            chain.tipTrailStyle(TipTrailStyle.CHERRY);
+            chain.traceTip(true);
+            chain.showNodes(true);
+            chain.nodeParticleSize(1.2f);
+            chain.drag(0.01);
+            chain.substeps(12);
+            chain.iterations(10);
+            chain.scale(2.2);
+            chain.active(false);
+        }
+        a.setPoseAngles(baseAngle, baseAngle);
+        b.setPoseAngles(baseAngle + delta, baseAngle + delta);
+        a.active(true);
+        b.active(true);
     }
 }

@@ -49,23 +49,27 @@ public final class SelectionListener implements Listener {
         }
 
         event.setCancelled(true);
-        if (this.manager.chains().size() >= this.maxChains) {
+        final int required = session.mode() == SelectionSession.SelectionMode.BUTTERFLY_CREATE ? 2 : 1;
+        if (this.manager.chains().size() + required > this.maxChains) {
             player.sendMessage(Component.text("Pendulum limit reached; clear one before creating another."));
             this.sessions.remove(playerId);
             return;
         }
 
-        final Location anchor = block.getLocation().add(0.5, 1.0, 0.5);
-        final int id = this.manager.createPendulum(anchor);
+        if (session.mode() == SelectionSession.SelectionMode.BUTTERFLY_CREATE) {
+            this.createButterfly(block.getLocation(), player);
+        } else {
+            final Location anchor = block.getLocation().add(0.5, 0.5, 0.5);
+            final int id = this.manager.createPendulum(anchor);
+            final String pos = "%s %.1f, %.1f, %.1f".formatted(
+                anchor.getWorld().getName(),
+                anchor.getX(),
+                anchor.getY(),
+                anchor.getZ()
+            );
+            player.sendMessage(Component.text("Created pendulum #" + id + " at " + pos + ". Configure it with /pendulum " + id + "."));
+        }
         this.sessions.remove(playerId);
-
-        final String pos = "%s %.1f, %.1f, %.1f".formatted(
-            anchor.getWorld().getName(),
-            anchor.getX(),
-            anchor.getY(),
-            anchor.getZ()
-        );
-        player.sendMessage(Component.text("Created pendulum #" + id + " at " + pos + ". Configure it with /pendulum " + id + "."));
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
@@ -84,7 +88,20 @@ public final class SelectionListener implements Listener {
     }
 
     public void requestSelection(Player player) {
-        this.sessions.put(player.getUniqueId(), new SelectionSession(player.getUniqueId(), Instant.now()));
+        this.sessions.put(player.getUniqueId(), new SelectionSession(player.getUniqueId(), Instant.now(), SelectionSession.SelectionMode.NORMAL));
         player.sendMessage(Component.text("Punch a block to pin the anchor for a new pendulum."));
+    }
+
+    public void requestButterflySelection(Player player) {
+        this.sessions.put(player.getUniqueId(), new SelectionSession(player.getUniqueId(), Instant.now(), SelectionSession.SelectionMode.BUTTERFLY_CREATE));
+        player.sendMessage(Component.text("Punch a block to spawn the butterfly pair demo."));
+    }
+
+    private void createButterfly(Location base, Player player) {
+        final Location anchor = base.add(0.5, 0.5, 0.5);
+        final int idA = this.manager.createPendulum(anchor);
+        final int idB = this.manager.createPendulum(anchor);
+        this.manager.configureButterfly(idA, idB);
+        player.sendMessage(Component.text("Spawned butterfly pair #" + idA + " and #" + idB + " at the same anchor. Use /pendulum start " + idA + " and /pendulum start " + idB + " to watch divergence."));
     }
 }

@@ -77,40 +77,20 @@ public final class Chaotic extends JavaPlugin {
                 this.selectionListener.requestSelection(player);
                 return Command.SINGLE_SUCCESS;
             }))
-            .then(Commands.literal("start").then(Commands.argument("id", IntegerArgumentType.integer(1)).executes(ctx -> {
+            .then(Commands.literal("butterfly").executes(ctx -> {
                 final Player player = playerOrWarn(ctx.getSource());
                 if (player == null) {
                     return Command.SINGLE_SUCCESS;
                 }
-                final int id = IntegerArgumentType.getInteger(ctx, "id");
-                final PendulumChain chain = this.manager.get(id).orElse(null);
-                if (chain == null) {
-                    player.sendMessage(Component.text("No pendulum #" + id + " exists."));
+                if (this.manager.chains().size() + 2 > MAX_CHAINS) {
+                    player.sendMessage(Component.text("Need room for two more pendulums; clear some first."));
                     return Command.SINGLE_SUCCESS;
                 }
-                if (!chain.configured()) {
-                    player.sendMessage(Component.text("Pendulum #" + id + " is not configured yet. Run /pendulum " + id + " first."));
-                    return Command.SINGLE_SUCCESS;
-                }
-                chain.active(true);
-                player.sendMessage(Component.text("Pendulum #" + id + " set to swing."));
+                this.selectionListener.requestButterflySelection(player);
                 return Command.SINGLE_SUCCESS;
-            })))
-            .then(Commands.literal("stop").then(Commands.argument("id", IntegerArgumentType.integer(1)).executes(ctx -> {
-                final Player player = playerOrWarn(ctx.getSource());
-                if (player == null) {
-                    return Command.SINGLE_SUCCESS;
-                }
-                final int id = IntegerArgumentType.getInteger(ctx, "id");
-                final PendulumChain chain = this.manager.get(id).orElse(null);
-                if (chain == null) {
-                    player.sendMessage(Component.text("No pendulum #" + id + " exists."));
-                    return Command.SINGLE_SUCCESS;
-                }
-                chain.active(false);
-                player.sendMessage(Component.text("Pendulum #" + id + " frozen mid-air."));
-                return Command.SINGLE_SUCCESS;
-            })))
+            }))
+            .then(Commands.literal("start").then(Commands.argument("ids", StringArgumentType.greedyString()).executes(ctx -> handleStartStop(ctx.getSource(), StringArgumentType.getString(ctx, "ids"), true))))
+            .then(Commands.literal("stop").then(Commands.argument("ids", StringArgumentType.greedyString()).executes(ctx -> handleStartStop(ctx.getSource(), StringArgumentType.getString(ctx, "ids"), false))))
             .then(Commands.literal("setpos").then(Commands.argument("pose", StringArgumentType.word())
                 .then(Commands.argument("id", IntegerArgumentType.integer(1)).executes(ctx -> {
                     final Player player = playerOrWarn(ctx.getSource());
@@ -156,6 +136,33 @@ public final class Chaotic extends JavaPlugin {
                 this.dialogService.openSetup(player, id);
                 return Command.SINGLE_SUCCESS;
             })).build();
+    }
+
+    private int handleStartStop(CommandSourceStack source, String idsRaw, boolean start) {
+        final Player player = playerOrWarn(source);
+        if (player == null) {
+            return Command.SINGLE_SUCCESS;
+        }
+        final String[] tokens = idsRaw.split("\\s+");
+        for (final String token : tokens) {
+            try {
+                final int id = Integer.parseInt(token);
+                final PendulumChain chain = this.manager.get(id).orElse(null);
+                if (chain == null) {
+                    player.sendMessage(Component.text("No pendulum #" + id + " exists."));
+                    continue;
+                }
+                if (start && !chain.configured()) {
+                    player.sendMessage(Component.text("Pendulum #" + id + " is not configured yet. Run /pendulum " + id + " first."));
+                    continue;
+                }
+                chain.active(start);
+                player.sendMessage(Component.text("Pendulum #" + id + " " + (start ? "started" : "stopped") + "."));
+            } catch (NumberFormatException ex) {
+                player.sendMessage(Component.text("Invalid id: " + token));
+            }
+        }
+        return Command.SINGLE_SUCCESS;
     }
 
     private static Player playerOrWarn(CommandSourceStack source) {

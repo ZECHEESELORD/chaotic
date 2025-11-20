@@ -352,6 +352,8 @@ public final class PendulumDialogService {
                 case BUBBLE -> "Bubble";
                 case BUBBLE_COLUMN_UP -> "Bubble column";
                 case BUBBLE_POP -> "Bubble pop";
+                case ParticleStyle.FISH -> "Fish (cod / salmon)";
+                case ParticleStyle.CHICKEN -> "Chicken";
             };
             entries.add(SingleOptionDialogInput.OptionEntry.create(style.name().toLowerCase(), Component.text(label), style == current));
         }

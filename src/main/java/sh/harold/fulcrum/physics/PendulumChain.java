@@ -7,10 +7,15 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.random.RandomGenerator;
 import org.bukkit.Color;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.World;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.util.Vector;
-import sh.harold.fulcrum.physics.ParticleStyle;
 
 public final class PendulumChain {
 
@@ -19,9 +24,16 @@ public final class PendulumChain {
     private static final double DEFAULT_LENGTH = 1.0;
     private static final double MIN_MASS = 0.1;
     private static final double MAX_MASS = 25.0;
+    private static final ItemStack COD_PARTICLE = new ItemStack(Material.COD);
+    private static final ItemStack SALMON_PARTICLE = new ItemStack(Material.SALMON);
+    private static final ItemStack CHICKEN_PARTICLE = new ItemStack(Material.CHICKEN);
+    private static final ItemStack COOKED_CHICKEN_PARTICLE = new ItemStack(Material.COOKED_CHICKEN);
 
     private final int id;
+    private final Plugin plugin;
     private final List<PendulumNode> nodes = new ArrayList<>();
+    private final List<Entity> nodeEntities = new ArrayList<>();
+    private final List<List<Entity>> segmentEntities = new ArrayList<>();
     private double[] segmentLength = new double[0];
     private ParticleStyle particleStyle = ParticleStyle.WEIGHTED;
     private Location anchor;
@@ -35,10 +47,13 @@ public final class PendulumChain {
     private boolean showNodes = true;
     private float nodeParticleSize = 1.0f;
     private TipTrailStyle tipTrailStyle = TipTrailStyle.END_ROD;
+    private ItemStack itemParticleEven = COD_PARTICLE;
+    private ItemStack itemParticleOdd = SALMON_PARTICLE;
 
-    public PendulumChain(int id, Location anchor) {
+    public PendulumChain(int id, Location anchor, Plugin plugin) {
         this.id = id;
         this.anchor = anchor.clone();
+        this.plugin = plugin;
     }
 
     public int id() {
@@ -183,12 +198,18 @@ public final class PendulumChain {
         this.tipTrailStyle = style;
     }
 
+    public void setItemParticles(ItemStack even, ItemStack odd) {
+        this.itemParticleEven = even == null ? COD_PARTICLE : even.clone();
+        this.itemParticleOdd = odd == null ? SALMON_PARTICLE : odd.clone();
+    }
+
     public void configureSegments(int segments) {
         final int targetSegments = Math.max(1, segments);
         final double[] previousLengths = this.segmentLength;
         final List<PendulumNode> previousNodes = List.copyOf(this.nodes);
 
         this.segmentLength = new double[targetSegments];
+        cleanupEntities();
         this.nodes.clear();
         for (int i = 0; i <= targetSegments; i++) {
             final double inheritedMass;
@@ -254,6 +275,34 @@ public final class PendulumChain {
             final PendulumNode node = this.nodes.get(i);
             node.pos(withJitter);
             node.prevPos(withJitter);
+        }
+    }
+
+    public void setPoseAngles(double... angles) {
+        if (angles.length != this.segmentLength.length) {
+            throw new IllegalArgumentException("Expected " + this.segmentLength.length + " angles, got " + angles.length);
+        }
+        final List<Vec2> positions = new ArrayList<>();
+        positions.add(Vec2.ZERO);
+        for (int i = 0; i < angles.length; i++) {
+            final double theta = angles[i];
+            final double dx = Math.sin(theta) * this.segmentLength[i];
+            final double dy = -Math.cos(theta) * this.segmentLength[i];
+            final Vec2 next = positions.get(i).add(new Vec2(dx, dy));
+            positions.add(next);
+        }
+        applyPositions(positions);
+    }
+
+    private void applyPositions(List<Vec2> positions) {
+        if (positions.size() != this.nodes.size()) {
+            throw new IllegalArgumentException("Positions size mismatch");
+        }
+        for (int i = 0; i < positions.size(); i++) {
+            final Vec2 pos = positions.get(i);
+            final PendulumNode node = this.nodes.get(i);
+            node.pos(pos);
+            node.prevPos(pos);
         }
     }
 
@@ -329,59 +378,87 @@ public final class PendulumChain {
         }
         Objects.requireNonNull(world, "world");
 
-        for (int i = 0; i < this.nodes.size() - 1; i++) {
-            final Location from = toWorld(world, i);
-            final Location to = toWorld(world, i + 1);
-            final Vector delta = to.toVector().subtract(from.toVector());
-            final double dist = delta.length();
-            if (dist < 1e-6) {
-                continue;
-            }
-            final double step = 0.15;
-            final int samples = Math.max(1, (int) Math.ceil(dist / step));
-            final Vector stride = delta.multiply(1.0 / samples);
-            final Location cursor = from.clone();
-            final ParticleStyle style = this.particleStyle;
-            final double massA = Math.max(MIN_MASS, this.nodes.get(i).mass());
-            final double massB = Math.max(MIN_MASS, this.nodes.get(i + 1).mass());
-            final double massSample = (massA + massB) * 0.5;
-            final Particle.DustOptions rodDust = style == ParticleStyle.WEIGHTED
-                ? new Particle.DustOptions(colorForMass(massSample), 0.8f)
-                : null;
-            for (int s = 0; s <= samples; s++) {
-                switch (style) {
-                    case SPARK -> world.spawnParticle(Particle.ELECTRIC_SPARK, cursor, 1, 0.0, 0.0, 0.0, 0.0);
-                    case BUBBLE -> world.spawnParticle(Particle.BUBBLE, cursor, 1, 0.0, 0.0, 0.0, 0.0);
-                    case BUBBLE_COLUMN_UP -> world.spawnParticle(Particle.BUBBLE_COLUMN_UP, cursor, 1, 0.0, 0.0, 0.0, 0.0);
-                    case BUBBLE_POP -> world.spawnParticle(Particle.BUBBLE_POP, cursor, 1, 0.0, 0.0, 0.0, 0.0);
-                    case WEIGHTED -> {
-                        if (rodDust != null) {
-                            world.spawnParticle(Particle.DUST, cursor, 1, rodDust);
-                        }
+        final ParticleStyle style = this.particleStyle;
+        if (isEntityStyle(style)) {
+            ensureEntityPools(world, style);
+            for (int i = 0; i < this.nodes.size() - 1; i++) {
+                final Location from = toWorld(world, i);
+                final Location to = toWorld(world, i + 1);
+                final Vector delta = to.toVector().subtract(from.toVector());
+                final List<Entity> pool = this.segmentEntities.get(i);
+                final int count = pool.size();
+                for (int s = 0; s < count; s++) {
+                    final double t = count == 1 ? 0.5 : (double) s / (count - 1);
+                    final Location loc = from.clone().add(delta.clone().multiply(t));
+                    final Entity entity = pool.get(s);
+                    if (entity != null && entity.isValid()) {
+                        entity.teleport(loc);
                     }
                 }
-                cursor.add(stride);
             }
-        }
 
-        for (int i = 0; i < this.nodes.size(); i++) {
-            final PendulumNode node = this.nodes.get(i);
-            final double mass = Math.max(MIN_MASS, node.mass());
-            final Location at = toWorld(world, i);
-            if (!this.showNodes && i != 0) {
-                continue;
+            for (int i = 0; i < this.nodes.size(); i++) {
+                final boolean show = this.showNodes || i == 0;
+                if (!show) {
+                    continue;
+                }
+                if (i >= this.nodeEntities.size()) {
+                    ensureEntityPools(world, style);
+                }
+                final Entity nodeEntity = this.nodeEntities.get(i);
+                if (nodeEntity != null && nodeEntity.isValid()) {
+                    nodeEntity.teleport(toWorld(world, i));
+                }
             }
-            final float size = Math.max(this.nodeParticleSize, (float) Math.min(1.4, 0.3 + mass * 0.05));
-            final ParticleStyle style = this.particleStyle;
-            switch (style) {
-                case SPARK -> world.spawnParticle(Particle.ELECTRIC_SPARK, at, 4, 0.0, 0.0, 0.0, 0.0);
-                case BUBBLE -> world.spawnParticle(Particle.BUBBLE, at, 3, 0.0, 0.0, 0.0, 0.0);
-                case BUBBLE_COLUMN_UP -> world.spawnParticle(Particle.BUBBLE_COLUMN_UP, at, 3, 0.0, 0.0, 0.0, 0.0);
-                case BUBBLE_POP -> world.spawnParticle(Particle.BUBBLE_POP, at, 3, 0.0, 0.0, 0.0, 0.0);
-                case WEIGHTED -> {
-                    final Color color = Color.fromRGB(255, 255, 255);
-                    final Particle.DustOptions bobDust = new Particle.DustOptions(color, size);
-                    world.spawnParticle(Particle.DUST, at, 3, bobDust);
+        } else {
+            cleanupEntities();
+            for (int i = 0; i < this.nodes.size() - 1; i++) {
+                final Location from = toWorld(world, i);
+                final Location to = toWorld(world, i + 1);
+                final Vector delta = to.toVector().subtract(from.toVector());
+                final double dist = delta.length();
+                if (dist < 1e-6) {
+                    continue;
+                }
+                final double massA = Math.max(MIN_MASS, this.nodes.get(i).mass());
+                final double massB = Math.max(MIN_MASS, this.nodes.get(i + 1).mass());
+                final double massSample = (massA + massB) * 0.5;
+                final Particle.DustOptions rodDust = new Particle.DustOptions(colorForMass(massSample), 0.8f);
+                final double step = 0.15;
+                final int samples = Math.max(1, (int) Math.ceil(dist / step));
+                final Vector stride = delta.multiply(1.0 / samples);
+                final Location cursor = from.clone();
+                for (int s = 0; s <= samples; s++) {
+                    switch (style) {
+                        case WEIGHTED -> world.spawnParticle(Particle.DUST, cursor, 1, rodDust);
+                        case SPARK -> world.spawnParticle(Particle.ELECTRIC_SPARK, cursor, 1, 0.0, 0.0, 0.0, 0.0);
+                        case BUBBLE -> world.spawnParticle(Particle.BUBBLE, cursor, 1, 0.0, 0.0, 0.0, 0.0);
+                        case BUBBLE_COLUMN_UP -> world.spawnParticle(Particle.BUBBLE_COLUMN_UP, cursor, 1, 0.0, 0.0, 0.0, 0.0);
+                        case BUBBLE_POP -> world.spawnParticle(Particle.BUBBLE_POP, cursor, 1, 0.0, 0.0, 0.0, 0.0);
+                        default -> {}
+                    }
+                    cursor.add(stride);
+                }
+            }
+
+            for (int i = 0; i < this.nodes.size(); i++) {
+                final PendulumNode node = this.nodes.get(i);
+                final double mass = Math.max(MIN_MASS, node.mass());
+                final Location at = toWorld(world, i);
+                if (!this.showNodes && i != 0) {
+                    continue;
+                }
+                final float size = Math.max(this.nodeParticleSize, (float) Math.min(1.4, 0.3 + mass * 0.05));
+                switch (style) {
+                    case WEIGHTED -> {
+                        final Particle.DustOptions bobDust = new Particle.DustOptions(Color.fromRGB(255, 255, 255), size);
+                        world.spawnParticle(Particle.DUST, at, 3, bobDust);
+                    }
+                    case SPARK -> world.spawnParticle(Particle.ELECTRIC_SPARK, at, 3, 0.0, 0.0, 0.0, 0.0);
+                    case BUBBLE -> world.spawnParticle(Particle.BUBBLE, at, 3, 0.0, 0.0, 0.0, 0.0);
+                    case BUBBLE_COLUMN_UP -> world.spawnParticle(Particle.BUBBLE_COLUMN_UP, at, 3, 0.0, 0.0, 0.0, 0.0);
+                    case BUBBLE_POP -> world.spawnParticle(Particle.BUBBLE_POP, at, 3, 0.0, 0.0, 0.0, 0.0);
+                    default -> {}
                 }
             }
         }
@@ -438,6 +515,86 @@ public final class PendulumChain {
             case FALLING -> Particle.FALLING_OBSIDIAN_TEAR;
             case CHERRY -> Particle.CHERRY_LEAVES;
         };
+    }
+
+    private ItemStack fishItemFor(int index) {
+        return (index & 1) == 0 ? this.itemParticleEven : this.itemParticleOdd;
+    }
+
+    private ItemStack chickenItemFor(int index) {
+        return (index & 1) == 0 ? CHICKEN_PARTICLE : COOKED_CHICKEN_PARTICLE;
+    }
+
+    private void ensureEntityPools(World world, ParticleStyle style) {
+        if (!isEntityStyle(style)) {
+            cleanupEntities();
+            return;
+        }
+        final EntityType typeEven = entityTypeFor(style, 0);
+        final EntityType typeOdd = entityTypeFor(style, 1);
+
+        while (this.nodeEntities.size() < this.nodes.size()) {
+            this.nodeEntities.add(spawnEntity(world, this.nodeEntities.size() % 2 == 0 ? typeEven : typeOdd));
+        }
+        while (this.nodeEntities.size() > this.nodes.size()) {
+            final Entity removed = this.nodeEntities.remove(this.nodeEntities.size() - 1);
+            removed.remove();
+        }
+
+        final int segments = this.segmentLength.length;
+        while (this.segmentEntities.size() < segments) {
+            this.segmentEntities.add(new ArrayList<>());
+        }
+        while (this.segmentEntities.size() > segments) {
+            final List<Entity> removed = this.segmentEntities.remove(this.segmentEntities.size() - 1);
+            removed.forEach(Entity::remove);
+        }
+
+        for (int i = 0; i < segments; i++) {
+            final List<Entity> pool = this.segmentEntities.get(i);
+            while (pool.size() < 8) {
+                final EntityType type = pool.size() % 2 == 0 ? typeEven : typeOdd;
+                pool.add(spawnEntity(world, type));
+            }
+            while (pool.size() > 8) {
+                final Entity removed = pool.remove(pool.size() - 1);
+                removed.remove();
+            }
+        }
+    }
+
+    public void cleanupEntities() {
+        this.nodeEntities.forEach(Entity::remove);
+        this.nodeEntities.clear();
+        for (final List<Entity> list : this.segmentEntities) {
+            list.forEach(Entity::remove);
+        }
+        this.segmentEntities.clear();
+    }
+
+    private EntityType entityTypeFor(ParticleStyle style, int index) {
+        return switch (style) {
+            case CHICKEN -> EntityType.CHICKEN;
+            case FISH -> (index & 1) == 0 ? EntityType.COD : EntityType.SALMON;
+            default -> EntityType.ARMOR_STAND;
+        };
+    }
+
+    private Entity spawnEntity(World world, EntityType type) {
+        final Entity entity = world.spawnEntity(this.anchor, type, false);
+        if (entity instanceof LivingEntity living) {
+            living.setAI(false);
+            living.setSilent(true);
+            living.setCollidable(false);
+            living.setInvulnerable(true);
+            living.setGravity(false);
+            living.setRemoveWhenFarAway(true);
+        }
+        return entity;
+    }
+
+    private boolean isEntityStyle(ParticleStyle style) {
+        return style == ParticleStyle.FISH || style == ParticleStyle.CHICKEN;
     }
 
     private Color colorForMass(double mass) {
