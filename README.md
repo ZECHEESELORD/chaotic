@@ -62,9 +62,11 @@ When a rod is stretched or compressed, we calculate a position correction vector
 $$w_{sum} = w_A + w_B$$
 
 **Correction for Node A:**
+
 $$\Delta P_A = \vec{\delta} \times \frac{w_A}{w_{sum}}$$
 
 **Correction for Node B:**
+
 $$\Delta P_B = -\vec{\delta} \times \frac{w_B}{w_{sum}}$$
 
 This ensures that if a heavy iron bob is connected to a light string, the string moves to satisfy the constraint, while the bob maintains its trajectory, preserving the inertia of the system.
@@ -92,8 +94,10 @@ $$P_{prev} \leftarrow P_{current} - (\vec{v}_{implicit} \times (1.0 - \text{drag
 The Minecraft game loop runs at 20 Hz ($\Delta t = 0.05s$). For a chaotic system, this step size is too large; high velocity nodes will overshoot their constraints significantly, adding spurious energy (making the pendulum explode).
 
 We implement **substepping**: dividing the game tick into $S$ smaller physics ticks.
+
 $$\Delta t_{physics} = \frac{0.05}{S}$$
-With $S=10$, we run the physics at an effective 200 Hz. This keeps the Taylor Series error term ($O(\Delta t^4)$) negligible.
+
+With $S=10$, we run the physics at an effective 200 Hz. This keeps the Taylor Series error term ( $O(\Delta t^4)$ ) negligible.
 
 ### Coordinate Transformation
 The simulation runs in a pure abstract 2D space (meters). Rendering involves an [affine transformation](https://www.mathworks.com/discovery/affine-transformation.html) to World Space (blocks):
