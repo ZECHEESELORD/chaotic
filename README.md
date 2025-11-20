@@ -1,5 +1,9 @@
 # Chaotic: Real-Time N-Link Pendulum Simulation via Discrete Variational Mechanics
 
+<p align="center">
+  <img alt="image" src="https://github.com/user-attachments/assets/a98025d6-9a80-44f0-99ae-9670e63a9f13"/>
+</p>
+
 ---
 
 ## The Premise
@@ -105,6 +109,17 @@ The simulation runs in a pure abstract 2D space (meters). Rendering involves an 
 $$\vec{P}_{world} = \vec{P}_{anchor} + (\vec{P}_{physics} \times \text{scale})$$
 
 This separation of concerns allows us to perform pure double precision math for the physics engine while adhering to the integer aligned grid of the voxel world for rendering.
+
+---
+
+## Video Demonstrations:
+
+https://github.com/user-attachments/assets/6e50c054-7222-4bd9-8e5f-f4c1d7918ac5
+
+https://github.com/user-attachments/assets/f79059f8-b409-4fa7-b3f5-5c7c69ff0f19
+
+https://github.com/user-attachments/assets/b92f6ace-cefc-44aa-b5a9-8fa6e6da6198
+
 
 
 ## References
