@@ -77,6 +77,7 @@ This ensures that if a heavy iron bob is connected to a light string, the string
 Verlet integration conserves energy so well that a pendulum in a vacuum would swing forever. To simulate atmospheric drag and improve stability, we apply damping.
 
 Since Verlet does not store velocity, we derive the **implicit velocity**:
+
 $$\vec{v}_{implicit} = P_{current} - P_{prev}$$
 
 We then apply a drag coefficient to the previous position, effectively shortening the step the particle "remembers" taking:
