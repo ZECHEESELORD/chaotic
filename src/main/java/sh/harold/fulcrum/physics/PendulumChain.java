@@ -34,6 +34,7 @@ public final class PendulumChain {
     private boolean traceTip;
     private boolean showNodes = true;
     private float nodeParticleSize = 1.0f;
+    private TipTrailStyle tipTrailStyle = TipTrailStyle.END_ROD;
 
     public PendulumChain(int id, Location anchor) {
         this.id = id;
@@ -174,6 +175,14 @@ public final class PendulumChain {
         this.nodeParticleSize = Math.max(0.2f, Math.min(2.5f, size));
     }
 
+    public TipTrailStyle tipTrailStyle() {
+        return this.tipTrailStyle;
+    }
+
+    public void tipTrailStyle(TipTrailStyle style) {
+        this.tipTrailStyle = style;
+    }
+
     public void configureSegments(int segments) {
         final int targetSegments = Math.max(1, segments);
         final double[] previousLengths = this.segmentLength;
@@ -222,11 +231,13 @@ public final class PendulumChain {
         double cumulativeAngle = -Math.PI / 2.0;
         for (int i = 0; i < this.segmentLength.length; i++) {
             if (poseType == PoseType.RANDOMIZED) {
-                final double perturb = rng.nextDouble(-Math.PI, Math.PI);
-                cumulativeAngle += perturb * 0.25;
-                final double dx = Math.cos(cumulativeAngle);
-                final double dy = Math.sin(cumulativeAngle);
-                direction = new Vec2(dx, dy);
+                if (i == 0) {
+                    cumulativeAngle = rng.nextDouble(0.0, Math.PI * 2.0);
+                } else {
+                    final double perturb = rng.nextDouble(-Math.PI, Math.PI);
+                    cumulativeAngle += perturb * 0.5;
+                }
+                direction = new Vec2(Math.cos(cumulativeAngle), Math.sin(cumulativeAngle));
             }
             final Vec2 last = positions.get(i);
             final Vec2 offset = direction.multiply(this.segmentLength[i]);
@@ -338,10 +349,16 @@ public final class PendulumChain {
                 ? new Particle.DustOptions(colorForMass(massSample), 0.8f)
                 : null;
             for (int s = 0; s <= samples; s++) {
-                if (style == ParticleStyle.SPARK) {
-                    world.spawnParticle(Particle.WAX_OFF, cursor, 1, 0.0, 0.0, 0.0, 0.0);
-                } else if (rodDust != null) {
-                    world.spawnParticle(Particle.DUST, cursor, 1, rodDust);
+                switch (style) {
+                    case SPARK -> world.spawnParticle(Particle.ELECTRIC_SPARK, cursor, 1, 0.0, 0.0, 0.0, 0.0);
+                    case BUBBLE -> world.spawnParticle(Particle.BUBBLE, cursor, 1, 0.0, 0.0, 0.0, 0.0);
+                    case BUBBLE_COLUMN_UP -> world.spawnParticle(Particle.BUBBLE_COLUMN_UP, cursor, 1, 0.0, 0.0, 0.0, 0.0);
+                    case BUBBLE_POP -> world.spawnParticle(Particle.BUBBLE_POP, cursor, 1, 0.0, 0.0, 0.0, 0.0);
+                    case WEIGHTED -> {
+                        if (rodDust != null) {
+                            world.spawnParticle(Particle.DUST, cursor, 1, rodDust);
+                        }
+                    }
                 }
                 cursor.add(stride);
             }
@@ -356,16 +373,42 @@ public final class PendulumChain {
             }
             final float size = Math.max(this.nodeParticleSize, (float) Math.min(1.4, 0.3 + mass * 0.05));
             final ParticleStyle style = this.particleStyle;
-            final Color color = style == ParticleStyle.WEIGHTED
-                ? Color.fromRGB(255, 255, 255)
-                : colorForMass(mass);
-            final Particle.DustOptions bobDust = new Particle.DustOptions(color, size);
-            world.spawnParticle(Particle.DUST, at, 3, bobDust);
+            switch (style) {
+                case SPARK -> world.spawnParticle(Particle.ELECTRIC_SPARK, at, 4, 0.0, 0.0, 0.0, 0.0);
+                case BUBBLE -> world.spawnParticle(Particle.BUBBLE, at, 3, 0.0, 0.0, 0.0, 0.0);
+                case BUBBLE_COLUMN_UP -> world.spawnParticle(Particle.BUBBLE_COLUMN_UP, at, 3, 0.0, 0.0, 0.0, 0.0);
+                case BUBBLE_POP -> world.spawnParticle(Particle.BUBBLE_POP, at, 3, 0.0, 0.0, 0.0, 0.0);
+                case WEIGHTED -> {
+                    final Color color = Color.fromRGB(255, 255, 255);
+                    final Particle.DustOptions bobDust = new Particle.DustOptions(color, size);
+                    world.spawnParticle(Particle.DUST, at, 3, bobDust);
+                }
+            }
         }
 
         if (this.traceTip && !this.nodes.isEmpty()) {
             final Location tip = toWorld(world, this.nodes.size() - 1);
-            world.spawnParticle(Particle.DRIPPING_OBSIDIAN_TEAR, tip, 2, 0.02, 0.02, 0.02, 0.0);
+            final Vec2 tipPos = this.nodes.get(this.nodes.size() - 1).pos();
+            final Vec2 tipPrev = this.nodes.get(this.nodes.size() - 1).prevPos();
+            final Vec2 delta = tipPos.subtract(tipPrev);
+            final double dist = delta.length();
+            if (dist > 1e-6) {
+                final int samples = Math.max(1, (int) Math.ceil(dist / 0.05));
+                final Vec2 step = delta.multiply(1.0 / samples);
+                Vec2 cursor = tipPrev;
+                for (int i = 0; i <= samples; i++) {
+                    final Location loc = new Location(
+                        world,
+                        this.anchor.getX() + cursor.x() * this.scale,
+                        this.anchor.getY() + cursor.y() * this.scale,
+                        this.anchor.getZ()
+                    );
+                    world.spawnParticle(mapTipParticle(), loc, 1, 0.0, 0.0, 0.0, 0.0);
+                    cursor = cursor.add(step);
+                }
+            } else {
+                world.spawnParticle(mapTipParticle(), tip, 1, 0.0, 0.0, 0.0, 0.0);
+            }
         }
     }
 
@@ -387,6 +430,14 @@ public final class PendulumChain {
         if (idx < 0 || idx >= this.nodes.size()) {
             throw new IndexOutOfBoundsException(idx);
         }
+    }
+
+    private Particle mapTipParticle() {
+        return switch (this.tipTrailStyle) {
+            case END_ROD -> Particle.END_ROD;
+            case FALLING -> Particle.FALLING_OBSIDIAN_TEAR;
+            case CHERRY -> Particle.CHERRY_LEAVES;
+        };
     }
 
     private Color colorForMass(double mass) {

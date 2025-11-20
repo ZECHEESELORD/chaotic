@@ -24,6 +24,7 @@ import io.papermc.paper.registry.data.dialog.type.DialogType;
 import sh.harold.fulcrum.physics.PendulumChain;
 import sh.harold.fulcrum.physics.ParticleStyle;
 import sh.harold.fulcrum.physics.PoseType;
+import sh.harold.fulcrum.physics.TipTrailStyle;
 import sh.harold.fulcrum.sim.PendulumManager;
 
 public final class PendulumDialogService {
@@ -201,6 +202,10 @@ public final class PendulumDialogService {
                 .labelVisible(true)
                 .build(),
             DialogInput.bool("trace", Component.text("Trace tip"), chain.traceTip(), "true", "false"),
+            DialogInput.singleOption("tipStyle", Component.text("Tip trail style"), tipStyleOptions(chain.tipTrailStyle()))
+                .width(200)
+                .labelVisible(true)
+                .build(),
             DialogInput.numberRange("drag", Component.text("Drag"), 0.001f, 0.05f)
                 .width(200)
                 .labelFormat("%s: %s")
@@ -259,8 +264,16 @@ public final class PendulumDialogService {
                 final double gravity = readDouble(response.getFloat("gravity"), chain.gravity(), 5.0, 15.0);
                 final ParticleStyle style = parseStyle(response.getText("style"), chain.particleStyle());
                 final Boolean trace = response.getBoolean("trace");
+                final TipTrailStyle tipStyle = parseTipStyle(response.getText("tipStyle"), chain.tipTrailStyle());
+                final Boolean nodes = response.getBoolean("nodes");
+                final double nodeSize = readDouble(response.getFloat("nodeSize"), chain.nodeParticleSize(), 0.2, 2.5);
                 chain.scale(scale);
                 chain.particleStyle(style);
+                if (nodes != null) {
+                    chain.showNodes(nodes);
+                }
+                chain.nodeParticleSize((float) nodeSize);
+                chain.tipTrailStyle(tipStyle);
                 chain.drag(drag);
                 chain.substeps(substeps);
                 chain.iterations(iterations);
@@ -332,11 +345,14 @@ public final class PendulumDialogService {
     private List<SingleOptionDialogInput.OptionEntry> styleOptions(ParticleStyle current) {
         final List<SingleOptionDialogInput.OptionEntry> entries = new java.util.ArrayList<>();
         for (final ParticleStyle style : ParticleStyle.values()) {
-            entries.add(SingleOptionDialogInput.OptionEntry.create(
-                style.name().toLowerCase(),
-                Component.text(style == ParticleStyle.WEIGHTED ? "Weighted color blend" : "Electric spark"),
-                style == current
-            ));
+            final String label = switch (style) {
+                case WEIGHTED -> "Weighted color blend";
+                case SPARK -> "Electric spark";
+                case BUBBLE -> "Bubble";
+                case BUBBLE_COLUMN_UP -> "Bubble column";
+                case BUBBLE_POP -> "Bubble pop";
+            };
+            entries.add(SingleOptionDialogInput.OptionEntry.create(style.name().toLowerCase(), Component.text(label), style == current));
         }
         return entries;
     }
@@ -347,6 +363,30 @@ public final class PendulumDialogService {
         }
         try {
             return ParticleStyle.valueOf(id.toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            return fallback;
+        }
+    }
+
+    private List<SingleOptionDialogInput.OptionEntry> tipStyleOptions(TipTrailStyle current) {
+        final List<SingleOptionDialogInput.OptionEntry> entries = new java.util.ArrayList<>();
+        for (final TipTrailStyle style : TipTrailStyle.values()) {
+            final String label = switch (style) {
+                case END_ROD -> "End rod trail";
+                case FALLING -> "Falling tear trail";
+                case CHERRY -> "Cherry leaves trail";
+            };
+            entries.add(SingleOptionDialogInput.OptionEntry.create(style.name().toLowerCase(), Component.text(label), style == current));
+        }
+        return entries;
+    }
+
+    private TipTrailStyle parseTipStyle(String id, TipTrailStyle fallback) {
+        if (id == null) {
+            return fallback;
+        }
+        try {
+            return TipTrailStyle.valueOf(id.toUpperCase());
         } catch (IllegalArgumentException ex) {
             return fallback;
         }
